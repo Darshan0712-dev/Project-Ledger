@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Project Ledger</title>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+<header class="app-header">
+  <h1>Project Ledger</h1>
+  <div class="month-selector">
+    <label for="month-input">Month</label>
+    <input type="month" id="month-input" />
+  </div>
+</header>
+
+<main>
+
+  <!-- Summary -->
+  <section class="card summary-card">
+    <div class="summary-grid">
+      <div class="summary-item">
+        <span class="summary-label">Income</span>
+        <span class="summary-value income" id="summary-income">₹0</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Expenses</span>
+        <span class="summary-value expense" id="summary-expenses">₹0</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Invested</span>
+        <span class="summary-value investment" id="summary-investments">₹0</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Available</span>
+        <span class="summary-value available" id="summary-available">₹0</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Add transaction forms -->
+  <section class="card">
+    <div class="tabs">
+      <button class="tab-button active" data-tab="expense-form">Add Expense</button>
+      <button class="tab-button" data-tab="income-form">Add Income</button>
+      <button class="tab-button" data-tab="investment-form">Add Investment</button>
+    </div>
+
+    <form id="expense-form" class="tab-panel active">
+      <div class="form-row">
+        <label for="expense-category">Category</label>
+        <select id="expense-category">
+          <option>Food</option>
+          <option>Travel</option>
+          <option>Entertainment</option>
+          <option>Gadgets</option>
+          <option>Education</option>
+          <option>Bills</option>
+          <option>Shopping</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="expense-description">Description</label>
+        <input type="text" id="expense-description" placeholder="e.g. Lunch" />
+      </div>
+      <div class="form-row">
+        <label for="expense-amount">Amount (₹)</label>
+        <input type="number" id="expense-amount" min="0" step="0.01" placeholder="0.00" />
+      </div>
+      <div class="form-row">
+        <label for="expense-date">Date</label>
+        <input type="date" id="expense-date" />
+      </div>
+      <button type="submit" class="save-button">Save Expense</button>
+      <p class="form-error" id="expense-error"></p>
+    </form>
+
+    <form id="income-form" class="tab-panel">
+      <div class="form-row">
+        <label for="income-type">Type</label>
+        <select id="income-type">
+          <option>Salary</option>
+          <option>Gift</option>
+          <option>Freelance</option>
+          <option>Scholarship</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="income-amount">Amount (₹)</label>
+        <input type="number" id="income-amount" min="0" step="0.01" placeholder="0.00" />
+      </div>
+      <div class="form-row">
+        <label for="income-date">Date</label>
+        <input type="date" id="income-date" />
+      </div>
+      <button type="submit" class="save-button">Save Income</button>
+      <p class="form-error" id="income-error"></p>
+    </form>
+
+    <form id="investment-form" class="tab-panel">
+      <div class="form-row">
+        <label for="investment-type">Type</label>
+        <select id="investment-type">
+          <option>Stock</option>
+          <option>Mutual Fund</option>
+          <option>FD</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="investment-amount">Amount (₹)</label>
+        <input type="number" id="investment-amount" min="0" step="0.01" placeholder="0.00" />
+      </div>
+      <div class="form-row">
+        <label for="investment-date">Date</label>
+        <input type="date" id="investment-date" />
+      </div>
+      <button type="submit" class="save-button">Save Investment</button>
+      <p class="form-error" id="investment-error"></p>
+    </form>
+  </section>
+
+  <!-- Expense categories -->
+  <section class="card">
+    <h2>Expense Categories</h2>
+    <div id="category-list" class="category-list">
+      <p class="empty-message">No expenses recorded for this month yet.</p>
+    </div>
+  </section>
+
+  <!-- Transactions -->
+  <section class="card">
+    <h2>Transactions</h2>
+    <div id="transaction-list" class="transaction-list">
+      <p class="empty-message">No transactions recorded for this month yet.</p>
+    </div>
+  </section>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

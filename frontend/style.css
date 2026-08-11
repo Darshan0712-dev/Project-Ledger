@@ -1,0 +1,256 @@
+:root {
+  --bg: #f6f5f2;
+  --card-bg: #ffffff;
+  --text: #2b2b2b;
+  --muted: #7a7a7a;
+  --border: #e6e3dd;
+  --income: #2f7d5c;
+  --expense: #b5533c;
+  --investment: #3c5f8a;
+  --available: #2b2b2b;
+  --accent: #2b2b2b;
+  --radius: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 24px 32px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card-bg);
+}
+
+.app-header h1 {
+  font-size: 22px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.month-selector {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.month-selector input {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+}
+
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin-bottom: 20px;
+}
+
+.card h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 14px;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Summary */
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+.summary-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.summary-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.summary-value {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.summary-value.income { color: var(--income); }
+.summary-value.expense { color: var(--expense); }
+.summary-value.investment { color: var(--investment); }
+.summary-value.available { color: var(--available); }
+
+/* Tabs */
+
+.tabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.tab-button {
+  border: none;
+  background: none;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+}
+
+.tab-button.active {
+  color: var(--text);
+  border-bottom: 2px solid var(--accent);
+  font-weight: 600;
+}
+
+.tab-panel {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tab-panel.active {
+  display: flex;
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-row label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.form-row input,
+.form-row select {
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 14px;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.save-button {
+  align-self: flex-start;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent);
+  color: white;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.save-button:hover {
+  opacity: 0.9;
+}
+
+.form-error {
+  color: var(--expense);
+  font-size: 13px;
+  margin: 0;
+  min-height: 18px;
+}
+
+/* Category list */
+
+.category-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.category-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 14px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.category-row:last-child {
+  border-bottom: none;
+}
+
+/* Transaction list */
+
+.transaction-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.transaction-row {
+  display: grid;
+  grid-template-columns: 90px 1fr auto;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.transaction-row:last-child {
+  border-bottom: none;
+}
+
+.transaction-kind {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.transaction-kind.Income { color: var(--income); }
+.transaction-kind.Expense { color: var(--expense); }
+.transaction-kind.Investment { color: var(--investment); }
+
+.transaction-detail {
+  color: var(--muted);
+}
+
+.transaction-amount {
+  font-weight: 600;
+  text-align: right;
+}
+
+.empty-message {
+  color: var(--muted);
+  font-size: 14px;
+  margin: 0;
+}
