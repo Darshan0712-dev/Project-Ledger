@@ -20,8 +20,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -55,6 +58,7 @@ public class LedgerServer {
         server.createContext("/api/transactions", this::handleGetTransactions);
         server.createContext("/api/summary", this::handleGetSummary);
         server.createContext("/api/categories", this::handleGetCategoryTotals);
+        server.createContext("/api/insights", this::handleGetInsights);
 
         // Everything else is treated as a request for a static frontend file.
         server.createContext("/", this::handleStaticFile);
@@ -192,6 +196,167 @@ public class LedgerServer {
         } catch (Exception e) {
             sendError(exchange, 400, "Could not calculate category totals.");
         }
+    }
+
+    // ---------- Financial Insights (V1.1 Milestone 2) ----------
+    //
+    // A single endpoint serves every "Show x Period" combination the
+    // Insights UI can request, rather than one endpoint per chart type.
+    //
+    // Response shapes (the "mode" field tells the frontend which one it got):
+    //
+    //   category mode  -> {"mode":"category","data":[{"label":"Food","amount":4200}, ...]}
+    //     Used when period = this_month and show = expenses/income/investments.
+    //     A single month's breakdown by category/type is more useful than a
+    //     one-point time series.
+    //
+    //   series mode    -> {"mode":"series","data":[{"month":"March 2026","amount":3200}, ...]}
+    //     Used for multi-month expenses/income/investments, and always for
+    //     "available" (available money has no categories to break down).
+    //
+    //   compare mode   -> {"mode":"compare","data":[{"month":"March 2026","income":5000,"expenses":3200}, ...]}
+    //     Used for "income_vs_expenses", regardless of period.
+    //
+    // All the actual math (sums, grouping) still happens in Ledger. This
+    // handler only decides WHICH Ledger calculations to call and shapes
+    // the result into JSON - no financial logic lives here.
+
+    private static final DateTimeFormatter MONTH_LABEL_FORMAT =
+            DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH);
+
+    private void handleGetInsights(HttpExchange exchange) throws IOException {
+        if (!methodIs(exchange, "GET")) {
+            sendMethodNotAllowed(exchange);
+            return;
+        }
+        try {
+            String show = requireQueryParam(exchange, "show");
+            String period = requireQueryParam(exchange, "period");
+
+            String json;
+            if (show.equals("income_vs_expenses")) {
+                json = buildCompareJson(resolvePeriodMonths(period));
+            } else if (period.equals("this_month") && isCategoryCapable(show)) {
+                json = buildCategoryJson(show, YearMonth.now());
+            } else if (isKnownShow(show)) {
+                json = buildSeriesJson(show, resolvePeriodMonths(period));
+            } else {
+                throw new ValidationException("Unknown 'show' value: " + show);
+            }
+
+            sendJson(exchange, 200, json);
+        } catch (ValidationException e) {
+            sendError(exchange, 400, e.getMessage());
+        } catch (Exception e) {
+            sendError(exchange, 400, "Could not load insights for the selected options.");
+        }
+    }
+
+    private boolean isCategoryCapable(String show) {
+        return show.equals("expenses") || show.equals("income") || show.equals("investments");
+    }
+
+    private boolean isKnownShow(String show) {
+        return show.equals("expenses") || show.equals("income")
+                || show.equals("investments") || show.equals("available");
+    }
+
+    private String buildCategoryJson(String show, YearMonth month) {
+        Map<String, BigDecimal> totals = switch (show) {
+            case "expenses" -> ledger.calculateCategoryTotals(month);
+            case "income" -> ledger.calculateIncomeTypeTotals(month);
+            case "investments" -> ledger.calculateInvestmentTypeTotals(month);
+            default -> throw new ValidationException("Unknown 'show' value: " + show);
+        };
+
+        StringBuilder data = new StringBuilder("[");
+        boolean first = true;
+        for (Map.Entry<String, BigDecimal> entry : totals.entrySet()) {
+            if (!first) data.append(",");
+            first = false;
+            data.append("{\"label\":\"").append(Json.escape(entry.getKey())).append("\",")
+                    .append("\"amount\":").append(entry.getValue().toPlainString()).append("}");
+        }
+        data.append("]");
+
+        return "{\"mode\":\"category\",\"data\":" + data + "}";
+    }
+
+    private String buildSeriesJson(String show, List<YearMonth> months) {
+        StringBuilder data = new StringBuilder("[");
+        for (int i = 0; i < months.size(); i++) {
+            if (i > 0) data.append(",");
+            YearMonth month = months.get(i);
+            Ledger.Summary summary = ledger.calculateSummary(month);
+            BigDecimal amount = switch (show) {
+                case "expenses" -> summary.totalExpenses;
+                case "income" -> summary.totalIncome;
+                case "investments" -> summary.totalInvestments;
+                case "available" -> summary.availableMoney;
+                default -> throw new ValidationException("Unknown 'show' value: " + show);
+            };
+            data.append("{\"month\":\"").append(month.format(MONTH_LABEL_FORMAT)).append("\",")
+                    .append("\"amount\":").append(amount.toPlainString()).append("}");
+        }
+        data.append("]");
+
+        return "{\"mode\":\"series\",\"data\":" + data + "}";
+    }
+
+    private String buildCompareJson(List<YearMonth> months) {
+        StringBuilder data = new StringBuilder("[");
+        for (int i = 0; i < months.size(); i++) {
+            if (i > 0) data.append(",");
+            YearMonth month = months.get(i);
+            Ledger.Summary summary = ledger.calculateSummary(month);
+            data.append("{\"month\":\"").append(month.format(MONTH_LABEL_FORMAT)).append("\",")
+                    .append("\"income\":").append(summary.totalIncome.toPlainString()).append(",")
+                    .append("\"expenses\":").append(summary.totalExpenses.toPlainString()).append("}");
+        }
+        data.append("]");
+
+        return "{\"mode\":\"compare\",\"data\":" + data + "}";
+    }
+
+    /**
+     * Translates a period name ("last_6_months", etc.) into the concrete
+     * list of YearMonths it covers, oldest first. This is request-parsing
+     * logic (interpreting "now" relative to a UI choice), so it lives here
+     * in the HTTP layer rather than in Ledger.
+     */
+    private List<YearMonth> resolvePeriodMonths(String period) {
+        YearMonth current = YearMonth.now();
+        List<YearMonth> months = new ArrayList<>();
+
+        switch (period) {
+            case "this_month" -> months.add(current);
+            case "last_3_months" -> {
+                for (int i = 2; i >= 0; i--) months.add(current.minusMonths(i));
+            }
+            case "last_6_months" -> {
+                for (int i = 5; i >= 0; i--) months.add(current.minusMonths(i));
+            }
+            case "this_year" -> {
+                for (int m = 1; m <= current.getMonthValue(); m++) {
+                    months.add(YearMonth.of(current.getYear(), m));
+                }
+            }
+            default -> throw new ValidationException("Unknown 'period' value: " + period);
+        }
+        return months;
+    }
+
+    private String requireQueryParam(HttpExchange exchange, String key) {
+        String query = exchange.getRequestURI().getQuery();
+        if (query != null) {
+            for (String param : query.split("&")) {
+                String[] parts = param.split("=", 2);
+                if (parts.length == 2 && parts[0].equals(key) && !parts[1].isEmpty()) {
+                    return parts[1];
+                }
+            }
+        }
+        throw new ValidationException("Missing required parameter: " + key);
     }
 
     // ---------- Static file handler (serves the frontend) ----------

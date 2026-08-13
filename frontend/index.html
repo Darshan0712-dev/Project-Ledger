@@ -133,6 +133,44 @@
     </div>
   </section>
 
+  <!-- Financial Insights -->
+  <section class="card">
+    <h2>Financial Insights</h2>
+    <div class="insights-controls">
+      <div class="form-row">
+        <label for="insights-show">Show</label>
+        <select id="insights-show">
+          <option value="expenses">Expenses</option>
+          <option value="income">Income</option>
+          <option value="investments">Investments</option>
+          <option value="available">Available Money</option>
+          <option value="income_vs_expenses">Income vs Expenses</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label for="insights-period">Period</label>
+        <select id="insights-period">
+          <option value="this_month">This Month</option>
+          <option value="last_3_months">Last 3 Months</option>
+          <option value="last_6_months">Last 6 Months</option>
+          <option value="this_year">This Year</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>View</label>
+        <div class="view-toggle" id="insights-view-toggle">
+          <button type="button" class="view-button" data-view="bar">Bar</button>
+          <button type="button" class="view-button" data-view="line">Line</button>
+          <button type="button" class="view-button" data-view="pie">Pie</button>
+        </div>
+      </div>
+    </div>
+    <div id="insights-chart-container" class="insights-chart-container">
+      <p class="empty-message">Loading...</p>
+    </div>
+    <p class="form-error" id="insights-error"></p>
+  </section>
+
   <!-- Transactions -->
   <section class="card">
     <h2>Transactions</h2>

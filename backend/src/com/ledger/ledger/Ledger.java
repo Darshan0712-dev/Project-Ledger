@@ -175,4 +175,32 @@ public class Ledger {
         }
         return totals;
     }
+
+    /**
+     * Returns total income amount grouped by type (Salary, Gift, etc.),
+     * for the given month. Mirrors calculateCategoryTotals but for Income.
+     */
+    public Map<String, BigDecimal> calculateIncomeTypeTotals(YearMonth month) {
+        Map<String, BigDecimal> totals = new LinkedHashMap<>();
+        for (Transaction t : getTransactionsForMonth(month)) {
+            if (t instanceof Income income) {
+                totals.merge(income.getType(), income.getAmount(), BigDecimal::add);
+            }
+        }
+        return totals;
+    }
+
+    /**
+     * Returns total investment amount grouped by type (Stock, FD, etc.),
+     * for the given month. Mirrors calculateCategoryTotals but for Investment.
+     */
+    public Map<String, BigDecimal> calculateInvestmentTypeTotals(YearMonth month) {
+        Map<String, BigDecimal> totals = new LinkedHashMap<>();
+        for (Transaction t : getTransactionsForMonth(month)) {
+            if (t instanceof Investment investment) {
+                totals.merge(investment.getType(), investment.getAmount(), BigDecimal::add);
+            }
+        }
+        return totals;
+    }
 }

@@ -359,6 +359,321 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// ---------- Financial Insights (V1.1 Milestone 2) ----------
+//
+// This block is entirely additive and does not touch any of the Smart
+// Expense Suggestions code above. It talks to one new backend endpoint,
+// GET /api/insights?show=...&period=..., and renders whatever comes back
+// as a small hand-drawn SVG chart. No charting library, no financial
+// math here - the backend (Ledger.java) has already done every
+// calculation; this code only draws shapes.
+
+const CHART_COLORS = {
+  expenses: "var(--expense)",
+  income: "var(--income)",
+  investments: "var(--investment)",
+  available: "var(--available)",
+  income_vs_expenses_income: "var(--income)",
+  income_vs_expenses_expenses: "var(--expense)",
+};
+
+// A small calm, muted palette for pie-slice categories (cycled through).
+const PIE_PALETTE = [
+  "#2f7d5c", "#b5533c", "#3c5f8a", "#a3853f", "#7a5ea8", "#4a8f8b", "#a1685f", "#5c7a9e",
+];
+
+const insightsShowSelect = document.getElementById("insights-show");
+const insightsPeriodSelect = document.getElementById("insights-period");
+const insightsViewToggle = document.getElementById("insights-view-toggle");
+const insightsChartContainer = document.getElementById("insights-chart-container");
+const insightsErrorEl = document.getElementById("insights-error");
+
+let currentInsightsView = "bar";
+let lastInsightsResult = null;
+
+/**
+ * Given the current Show + Period selection, returns which view buttons
+ * (bar/line/pie) are semantically valid, per the product rules:
+ *   - Single-month category/type breakdowns: Bar or Pie (not Line).
+ *   - Multi-month time series (including Available Money, which never
+ *     has categories, and Income vs Expenses, which is always a
+ *     two-series comparison): Bar or Line (not Pie).
+ */
+function getValidInsightViews(show, period) {
+  if (show === "available" || show === "income_vs_expenses") {
+    return ["bar", "line"];
+  }
+  if (period === "this_month") {
+    return ["bar", "pie"];
+  }
+  return ["bar", "line"];
+}
+
+function updateInsightsViewButtons(validViews) {
+  if (!validViews.includes(currentInsightsView)) {
+    currentInsightsView = validViews[0];
+  }
+  insightsViewToggle.querySelectorAll(".view-button").forEach((button) => {
+    const view = button.dataset.view;
+    const allowed = validViews.includes(view);
+    button.disabled = !allowed;
+    button.classList.toggle("active", allowed && view === currentInsightsView);
+  });
+}
+
+insightsViewToggle.querySelectorAll(".view-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    if (button.disabled) return;
+    currentInsightsView = button.dataset.view;
+    insightsViewToggle.querySelectorAll(".view-button").forEach((b) => {
+      b.classList.toggle("active", b === button);
+    });
+    if (lastInsightsResult) {
+      renderInsightsChart(lastInsightsResult);
+    }
+  });
+});
+
+insightsShowSelect.addEventListener("change", loadInsights);
+insightsPeriodSelect.addEventListener("change", loadInsights);
+
+async function loadInsights() {
+  const show = insightsShowSelect.value;
+  const period = insightsPeriodSelect.value;
+
+  updateInsightsViewButtons(getValidInsightViews(show, period));
+  insightsErrorEl.textContent = "";
+  insightsChartContainer.innerHTML = '<p class="empty-message">Loading...</p>';
+
+  try {
+    const result = await getJson(`/api/insights?show=${show}&period=${period}`);
+    lastInsightsResult = result;
+    renderInsightsChart(result);
+  } catch (err) {
+    console.error("Could not load financial insights:", err);
+    lastInsightsResult = null;
+    insightsChartContainer.innerHTML = "";
+    insightsErrorEl.textContent = "Could not load insights right now. Please try again.";
+  }
+}
+
+function renderInsightsChart(result) {
+  if (!result || !result.data || result.data.length === 0) {
+    insightsChartContainer.innerHTML = '<p class="empty-message">No data available for this period yet.</p>';
+    return;
+  }
+
+  const show = insightsShowSelect.value;
+
+  if (result.mode === "category") {
+    const color = CHART_COLORS[show] || "var(--accent)";
+    insightsChartContainer.innerHTML =
+      currentInsightsView === "pie"
+        ? buildPieChart(result.data, "label", "amount")
+        : buildBarChart(result.data, "label", "amount", color);
+  } else if (result.mode === "series") {
+    const color = CHART_COLORS[show] || "var(--accent)";
+    insightsChartContainer.innerHTML =
+      currentInsightsView === "line"
+        ? buildLineChart(result.data, "month", "amount", color)
+        : buildBarChart(result.data, "month", "amount", color);
+  } else if (result.mode === "compare") {
+    insightsChartContainer.innerHTML =
+      currentInsightsView === "line"
+        ? buildCompareLineChart(result.data)
+        : buildCompareBarChart(result.data);
+  }
+}
+
+// ---------- Small SVG chart builders ----------
+//
+// These are deliberately simple: fixed viewBox, plain rects/lines/paths,
+// no external dependency. They rely on the existing CSS custom properties
+// (--income, --expense, etc.) so colors always match the rest of the app.
+
+function truncateLabel(label, maxLen = 10) {
+  const text = String(label);
+  return text.length > maxLen ? text.slice(0, maxLen - 1) + "\u2026" : text;
+}
+
+function buildBarChart(data, labelKey, valueKey, color) {
+  const width = 640;
+  const height = 260;
+  const padding = 44;
+  const maxValue = Math.max(...data.map((d) => Number(d[valueKey])), 1);
+  const plotWidth = width - padding * 2;
+  const plotHeight = height - padding * 2;
+  const slot = plotWidth / data.length;
+  const barWidth = Math.min(slot * 0.55, 56);
+
+  let bars = "";
+  data.forEach((d, i) => {
+    const value = Number(d[valueKey]);
+    const barHeight = maxValue > 0 ? (value / maxValue) * plotHeight : 0;
+    const x = padding + i * slot + (slot - barWidth) / 2;
+    const y = height - padding - barHeight;
+    bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${barHeight.toFixed(1)}" rx="4" fill="${color}"></rect>`;
+    bars += `<text x="${(x + barWidth / 2).toFixed(1)}" y="${(y - 8).toFixed(1)}" text-anchor="middle" class="chart-value-label">${escapeHtml(formatRupees(value))}</text>`;
+    bars += `<text x="${(x + barWidth / 2).toFixed(1)}" y="${height - padding + 18}" text-anchor="middle" class="chart-axis-label">${escapeHtml(truncateLabel(d[labelKey]))}</text>`;
+  });
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="insights-svg" role="img" aria-label="Bar chart">
+    <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" class="chart-axis-line"></line>
+    ${bars}
+  </svg>`;
+}
+
+function buildLineChart(data, labelKey, valueKey, color) {
+  const width = 640;
+  const height = 260;
+  const padding = 44;
+  const maxValue = Math.max(...data.map((d) => Number(d[valueKey])), 1);
+  const plotWidth = width - padding * 2;
+  const plotHeight = height - padding * 2;
+  const step = data.length > 1 ? plotWidth / (data.length - 1) : 0;
+
+  const points = data.map((d, i) => {
+    const value = Number(d[valueKey]);
+    const x = padding + (data.length > 1 ? i * step : plotWidth / 2);
+    const y = height - padding - (maxValue > 0 ? (value / maxValue) * plotHeight : 0);
+    return { x, y, value, label: d[labelKey] };
+  });
+
+  const polyline = points.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+
+  let markers = "";
+  points.forEach((p) => {
+    markers += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="4" fill="${color}"></circle>`;
+    markers += `<text x="${p.x.toFixed(1)}" y="${(p.y - 10).toFixed(1)}" text-anchor="middle" class="chart-value-label">${escapeHtml(formatRupees(p.value))}</text>`;
+    markers += `<text x="${p.x.toFixed(1)}" y="${height - padding + 18}" text-anchor="middle" class="chart-axis-label">${escapeHtml(truncateLabel(p.label, 8))}</text>`;
+  });
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="insights-svg" role="img" aria-label="Line chart">
+    <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" class="chart-axis-line"></line>
+    <polyline points="${polyline}" fill="none" stroke="${color}" stroke-width="2"></polyline>
+    ${markers}
+  </svg>`;
+}
+
+function buildPieChart(data, labelKey, valueKey) {
+  const size = 260;
+  const radius = 90;
+  const cx = size / 2;
+  const cy = size / 2;
+  const total = data.reduce((sum, d) => sum + Number(d[valueKey]), 0);
+
+  let angle = -Math.PI / 2; // start at 12 o'clock
+  let slices = "";
+  let legend = "";
+
+  data.forEach((d, i) => {
+    const value = Number(d[valueKey]);
+    const fraction = total > 0 ? value / total : 0;
+    const sweep = fraction * 2 * Math.PI;
+    const x1 = cx + radius * Math.cos(angle);
+    const y1 = cy + radius * Math.sin(angle);
+    angle += sweep;
+    const x2 = cx + radius * Math.cos(angle);
+    const y2 = cy + radius * Math.sin(angle);
+    const largeArc = sweep > Math.PI ? 1 : 0;
+    const color = PIE_PALETTE[i % PIE_PALETTE.length];
+
+    if (total > 0) {
+      slices += `<path d="M ${cx} ${cy} L ${x1.toFixed(2)} ${y1.toFixed(2)} A ${radius} ${radius} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)} Z" fill="${color}"></path>`;
+    }
+
+    const percent = total > 0 ? Math.round(fraction * 100) : 0;
+    legend += `<span class="insights-legend-item">
+      <span class="insights-legend-swatch" style="background:${color}"></span>
+      ${escapeHtml(d[labelKey])} &middot; ${escapeHtml(formatRupees(value))} (${percent}%)
+    </span>`;
+  });
+
+  return `<svg viewBox="0 0 ${size} ${size}" class="insights-svg" role="img" aria-label="Pie chart" style="max-width:300px;">
+      ${slices}
+    </svg>
+    <div class="insights-legend">${legend}</div>`;
+}
+
+function buildCompareBarChart(data) {
+  const width = 640;
+  const height = 260;
+  const padding = 44;
+  const maxValue = Math.max(...data.flatMap((d) => [Number(d.income), Number(d.expenses)]), 1);
+  const plotWidth = width - padding * 2;
+  const plotHeight = height - padding * 2;
+  const slot = plotWidth / data.length;
+  const barWidth = Math.min(slot * 0.28, 34);
+  const gapBetweenBars = 6;
+
+  let bars = "";
+  data.forEach((d, i) => {
+    const groupCenter = padding + i * slot + slot / 2;
+    const incomeHeight = maxValue > 0 ? (Number(d.income) / maxValue) * plotHeight : 0;
+    const expenseHeight = maxValue > 0 ? (Number(d.expenses) / maxValue) * plotHeight : 0;
+
+    const incomeX = groupCenter - barWidth - gapBetweenBars / 2;
+    const expenseX = groupCenter + gapBetweenBars / 2;
+
+    bars += `<rect x="${incomeX.toFixed(1)}" y="${(height - padding - incomeHeight).toFixed(1)}" width="${barWidth}" height="${incomeHeight.toFixed(1)}" rx="3" fill="${CHART_COLORS.income_vs_expenses_income}"></rect>`;
+    bars += `<rect x="${expenseX.toFixed(1)}" y="${(height - padding - expenseHeight).toFixed(1)}" width="${barWidth}" height="${expenseHeight.toFixed(1)}" rx="3" fill="${CHART_COLORS.income_vs_expenses_expenses}"></rect>`;
+    bars += `<text x="${groupCenter.toFixed(1)}" y="${height - padding + 18}" text-anchor="middle" class="chart-axis-label">${escapeHtml(truncateLabel(d.month, 8))}</text>`;
+  });
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="insights-svg" role="img" aria-label="Income vs expenses bar chart">
+      <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" class="chart-axis-line"></line>
+      ${bars}
+    </svg>
+    <div class="insights-legend">
+      <span class="insights-legend-item"><span class="insights-legend-swatch" style="background:var(--income)"></span>Income</span>
+      <span class="insights-legend-item"><span class="insights-legend-swatch" style="background:var(--expense)"></span>Expenses</span>
+    </div>`;
+}
+
+function buildCompareLineChart(data) {
+  const width = 640;
+  const height = 260;
+  const padding = 44;
+  const maxValue = Math.max(...data.flatMap((d) => [Number(d.income), Number(d.expenses)]), 1);
+  const plotWidth = width - padding * 2;
+  const plotHeight = height - padding * 2;
+  const step = data.length > 1 ? plotWidth / (data.length - 1) : 0;
+
+  const incomePoints = [];
+  const expensePoints = [];
+
+  data.forEach((d, i) => {
+    const x = padding + (data.length > 1 ? i * step : plotWidth / 2);
+    incomePoints.push({ x, y: height - padding - (maxValue > 0 ? (Number(d.income) / maxValue) * plotHeight : 0) });
+    expensePoints.push({ x, y: height - padding - (maxValue > 0 ? (Number(d.expenses) / maxValue) * plotHeight : 0) });
+  });
+
+  const incomeLine = incomePoints.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+  const expenseLine = expensePoints.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ");
+
+  let markers = "";
+  incomePoints.forEach((p) => (markers += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--income)"></circle>`));
+  expensePoints.forEach((p) => (markers += `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="var(--expense)"></circle>`));
+
+  let labels = "";
+  data.forEach((d, i) => {
+    const x = padding + (data.length > 1 ? i * step : plotWidth / 2);
+    labels += `<text x="${x.toFixed(1)}" y="${height - padding + 18}" text-anchor="middle" class="chart-axis-label">${escapeHtml(truncateLabel(d.month, 8))}</text>`;
+  });
+
+  return `<svg viewBox="0 0 ${width} ${height}" class="insights-svg" role="img" aria-label="Income vs expenses line chart">
+      <line x1="${padding}" y1="${height - padding}" x2="${width - padding}" y2="${height - padding}" class="chart-axis-line"></line>
+      <polyline points="${incomeLine}" fill="none" stroke="var(--income)" stroke-width="2"></polyline>
+      <polyline points="${expenseLine}" fill="none" stroke="var(--expense)" stroke-width="2"></polyline>
+      ${markers}
+      ${labels}
+    </svg>
+    <div class="insights-legend">
+      <span class="insights-legend-item"><span class="insights-legend-swatch" style="background:var(--income)"></span>Income</span>
+      <span class="insights-legend-item"><span class="insights-legend-swatch" style="background:var(--expense)"></span>Expenses</span>
+    </div>`;
+}
+
 async function refreshAll() {
   try {
     await Promise.all([
@@ -366,6 +681,7 @@ async function refreshAll() {
       refreshCategories(),
       refreshTransactions(),
       loadExpenseHistorySuggestions(),
+      loadInsights(),
     ]);
   } catch (err) {
     console.error(err);
