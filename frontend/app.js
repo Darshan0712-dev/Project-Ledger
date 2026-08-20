@@ -1,4 +1,4 @@
-// Project Ledger - frontend logic
+ // Project Ledger - frontend logic
 //
 // This file has one job: talk to the Java backend over fetch() and
 // update the page with whatever comes back. There is no financial
@@ -31,6 +31,7 @@ const monthInput = document.getElementById("month-input");
 
 const PREDEFINED_EXPENSE_SUGGESTIONS = [
   { description: "Petrol", category: "Travel" },
+  {description:"Diesel",category:"Travel"},
   { description: "Lunch", category: "Food" },
   { description: "Bus", category: "Travel" },
   { description: "Coffee", category: "Food" },
