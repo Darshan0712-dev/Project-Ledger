@@ -13,8 +13,8 @@ public class Income extends Transaction {
 
     private final String type;
 
-    public Income(String type, BigDecimal amount, LocalDate date) {
-        super(amount, date);
+    public Income(int id, String type, BigDecimal amount, LocalDate date) {
+        super(id, amount, date);
         this.type = type;
     }
 
@@ -30,6 +30,7 @@ public class Income extends Transaction {
     @Override
     public String toJson() {
         return "{"
+                + "\"id\":" + getId() + ","
                 + "\"kind\":\"Income\","
                 + "\"type\":\"" + Json.escape(type) + "\","
                 + "\"amount\":" + getAmount().toPlainString() + ","

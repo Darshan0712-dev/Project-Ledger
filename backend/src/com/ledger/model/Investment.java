@@ -14,8 +14,8 @@ public class Investment extends Transaction {
 
     private final String type;
 
-    public Investment(String type, BigDecimal amount, LocalDate date) {
-        super(amount, date);
+    public Investment(int id, String type, BigDecimal amount, LocalDate date) {
+        super(id, amount, date);
         this.type = type;
     }
 
@@ -31,6 +31,7 @@ public class Investment extends Transaction {
     @Override
     public String toJson() {
         return "{"
+                + "\"id\":" + getId() + ","
                 + "\"kind\":\"Investment\","
                 + "\"type\":\"" + Json.escape(type) + "\","
                 + "\"amount\":" + getAmount().toPlainString() + ","

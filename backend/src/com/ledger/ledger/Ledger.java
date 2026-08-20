@@ -4,6 +4,7 @@ import com.ledger.model.Expense;
 import com.ledger.model.Income;
 import com.ledger.model.Investment;
 import com.ledger.model.Transaction;
+import com.ledger.util.TransactionNotFoundException;
 import com.ledger.util.ValidationException;
 
 import java.math.BigDecimal;
@@ -14,6 +15,7 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Ledger is the "brain" of the application. It owns the single list of
@@ -31,13 +33,19 @@ public class Ledger {
 
     private final List<Transaction> transactions = new ArrayList<>();
 
+    // Simple in-memory id generator. Starts at 1 and only ever increases,
+    // so ids stay unique for the lifetime of the running server - even if
+    // a transaction with a lower id is later deleted. Since storage is
+    // in-memory, ids do not need to survive a server restart (V1.2 scope).
+    private final AtomicInteger nextId = new AtomicInteger(1);
+
     // ---------- Adding transactions ----------
 
     public Income addIncome(String type, BigDecimal amount, LocalDate date) {
         validateCommon(amount, date);
         validateNotBlank(type, "Income type");
 
-        Income income = new Income(type.trim(), amount, date);
+        Income income = new Income(nextId.getAndIncrement(), type.trim(), amount, date);
         transactions.add(income);
         return income;
     }
@@ -47,7 +55,7 @@ public class Ledger {
         validateNotBlank(category, "Category");
         validateNotBlank(description, "Description");
 
-        Expense expense = new Expense(category.trim(), description.trim(), amount, date);
+        Expense expense = new Expense(nextId.getAndIncrement(), category.trim(), description.trim(), amount, date);
         transactions.add(expense);
         return expense;
     }
@@ -56,9 +64,90 @@ public class Ledger {
         validateCommon(amount, date);
         validateNotBlank(type, "Investment type");
 
-        Investment investment = new Investment(type.trim(), amount, date);
+        Investment investment = new Investment(nextId.getAndIncrement(), type.trim(), amount, date);
         transactions.add(investment);
         return investment;
+    }
+
+    // ---------- Editing transactions (V1.2 Milestone 1) ----------
+    //
+    // Transaction objects are otherwise immutable (all fields final), so
+    // "editing" means: validate the new data, build a brand new object
+    // that keeps the SAME id, and replace the old object at its current
+    // list position. From the outside (the API, the UI) this behaves as
+    // an in-place update - same transaction, new values - without needing
+    // to add mutability/setters to the model classes.
+
+    public Income updateIncome(int id, String type, BigDecimal amount, LocalDate date) {
+        validateCommon(amount, date);
+        validateNotBlank(type, "Income type");
+
+        int index = findIndexById(id);
+        if (!(transactions.get(index) instanceof Income)) {
+            throw new ValidationException("Transaction " + id + " is not an Income entry.");
+        }
+
+        Income updated = new Income(id, type.trim(), amount, date);
+        transactions.set(index, updated);
+        return updated;
+    }
+
+    public Expense updateExpense(int id, String category, String description, BigDecimal amount, LocalDate date) {
+        validateCommon(amount, date);
+        validateNotBlank(category, "Category");
+        validateNotBlank(description, "Description");
+
+        int index = findIndexById(id);
+        if (!(transactions.get(index) instanceof Expense)) {
+            throw new ValidationException("Transaction " + id + " is not an Expense entry.");
+        }
+
+        Expense updated = new Expense(id, category.trim(), description.trim(), amount, date);
+        transactions.set(index, updated);
+        return updated;
+    }
+
+    public Investment updateInvestment(int id, String type, BigDecimal amount, LocalDate date) {
+        validateCommon(amount, date);
+        validateNotBlank(type, "Investment type");
+
+        int index = findIndexById(id);
+        if (!(transactions.get(index) instanceof Investment)) {
+            throw new ValidationException("Transaction " + id + " is not an Investment entry.");
+        }
+
+        Investment updated = new Investment(id, type.trim(), amount, date);
+        transactions.set(index, updated);
+        return updated;
+    }
+
+    // ---------- Deleting transactions (V1.2 Milestone 1) ----------
+
+    public void deleteTransaction(int id) {
+        int index = findIndexById(id);
+        transactions.remove(index);
+    }
+
+    // ---------- Finding a transaction by id ----------
+
+    /**
+     * Returns the transaction with the given id, or throws
+     * TransactionNotFoundException if none exists. Used both by the
+     * update/delete methods above and by LedgerServer, which needs to
+     * know a transaction's kind (Income/Expense/Investment) before it
+     * can dispatch an edit request to the right update method.
+     */
+    public Transaction getTransactionById(int id) {
+        return transactions.get(findIndexById(id));
+    }
+
+    private int findIndexById(int id) {
+        for (int i = 0; i < transactions.size(); i++) {
+            if (transactions.get(i).getId() == id) {
+                return i;
+            }
+        }
+        throw new TransactionNotFoundException("No transaction found with id " + id + ".");
     }
 
     // ---------- Validation ----------

@@ -10,12 +10,25 @@ import java.time.LocalDate;
  */
 public abstract class Transaction {
 
+    private final int id;
     private final BigDecimal amount;
     private final LocalDate date;
 
-    protected Transaction(BigDecimal amount, LocalDate date) {
+    protected Transaction(int id, BigDecimal amount, LocalDate date) {
+        this.id = id;
         this.amount = amount;
         this.date = date;
+    }
+
+    /**
+     * Uniquely identifies this transaction for as long as it exists.
+     * Assigned once by Ledger when the transaction is created, and never
+     * changes - including across edits (an edit replaces the transaction's
+     * data but keeps its id, so it stays the "same" transaction from the
+     * user's point of view).
+     */
+    public int getId() {
+        return id;
     }
 
     public BigDecimal getAmount() {

@@ -75,7 +75,10 @@
         <label for="expense-date">Date</label>
         <input type="date" id="expense-date" />
       </div>
-      <button type="submit" class="save-button">Save Expense</button>
+      <div class="form-actions">
+        <button type="submit" class="save-button">Save Expense</button>
+        <button type="button" class="cancel-edit-button" id="expense-cancel-edit" hidden>Cancel edit</button>
+      </div>
       <p class="form-error" id="expense-error"></p>
     </form>
 
@@ -98,7 +101,10 @@
         <label for="income-date">Date</label>
         <input type="date" id="income-date" />
       </div>
-      <button type="submit" class="save-button">Save Income</button>
+      <div class="form-actions">
+        <button type="submit" class="save-button">Save Income</button>
+        <button type="button" class="cancel-edit-button" id="income-cancel-edit" hidden>Cancel edit</button>
+      </div>
       <p class="form-error" id="income-error"></p>
     </form>
 
@@ -120,7 +126,10 @@
         <label for="investment-date">Date</label>
         <input type="date" id="investment-date" />
       </div>
-      <button type="submit" class="save-button">Save Investment</button>
+      <div class="form-actions">
+        <button type="submit" class="save-button">Save Investment</button>
+        <button type="button" class="cancel-edit-button" id="investment-cancel-edit" hidden>Cancel edit</button>
+      </div>
       <p class="form-error" id="investment-error"></p>
     </form>
   </section>

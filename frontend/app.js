@@ -214,6 +214,149 @@ document.querySelectorAll(".tab-button").forEach((button) => {
   });
 });
 
+// ---------- Edit / Delete Transactions (V1.2 Milestone 1) ----------
+//
+// Editing reuses the existing Add forms rather than introducing a
+// separate edit page: clicking "Edit" on a transaction switches to that
+// transaction's tab, fills the form with its current values, and swaps
+// the form into an "editing" state (tab label + save button say "Edit"/
+// "Update" instead of "Add"/"Save", and a Cancel option appears). Saving
+// sends a PUT to /api/transactions/{id} instead of a POST to the normal
+// add endpoint. Nothing about the Smart Suggestions wiring on the
+// description field changes - it works the same whether the form is in
+// add mode or edit mode.
+
+// Holds whatever the transaction list last fetched, so clicking "Edit"
+// can look up the full record locally without an extra network request.
+let currentTransactions = [];
+
+// Set to { id, kind } while a transaction is being edited, otherwise null.
+let editingTransaction = null;
+
+const expenseTabButton = document.querySelector('[data-tab="expense-form"]');
+const incomeTabButton = document.querySelector('[data-tab="income-form"]');
+const investmentTabButton = document.querySelector('[data-tab="investment-form"]');
+
+const expenseSaveButton = document.querySelector("#expense-form .save-button");
+const incomeSaveButton = document.querySelector("#income-form .save-button");
+const investmentSaveButton = document.querySelector("#investment-form .save-button");
+
+function activateTab(tabId) {
+  document.querySelectorAll(".tab-button").forEach((b) => b.classList.remove("active"));
+  document.querySelectorAll(".tab-panel").forEach((p) => p.classList.remove("active"));
+  document.querySelector(`[data-tab="${tabId}"]`).classList.add("active");
+  document.getElementById(tabId).classList.add("active");
+}
+
+function showCancelEditButton(kind) {
+  document.querySelectorAll(".cancel-edit-button").forEach((btn) => (btn.hidden = true));
+  const idByKind = {
+    Expense: "expense-cancel-edit",
+    Income: "income-cancel-edit",
+    Investment: "investment-cancel-edit",
+  };
+  const button = document.getElementById(idByKind[kind]);
+  if (button) button.hidden = false;
+}
+
+function hideCancelEditButtons() {
+  document.querySelectorAll(".cancel-edit-button").forEach((btn) => (btn.hidden = true));
+}
+
+/**
+ * Populates the matching form with an existing transaction's values and
+ * switches that form into "editing" mode.
+ */
+function enterEditMode(transaction) {
+  editingTransaction = { id: transaction.id, kind: transaction.kind };
+
+  if (transaction.kind === "Expense") {
+    activateTab("expense-form");
+    document.getElementById("expense-category").value = transaction.category;
+    document.getElementById("expense-description").value = transaction.description;
+    document.getElementById("expense-amount").value = transaction.amount;
+    document.getElementById("expense-date").value = transaction.date;
+    document.getElementById("expense-error").textContent = "";
+    expenseTabButton.textContent = "Edit Expense";
+    expenseSaveButton.textContent = "Update Expense";
+  } else if (transaction.kind === "Income") {
+    activateTab("income-form");
+    document.getElementById("income-type").value = transaction.type;
+    document.getElementById("income-amount").value = transaction.amount;
+    document.getElementById("income-date").value = transaction.date;
+    document.getElementById("income-error").textContent = "";
+    incomeTabButton.textContent = "Edit Income";
+    incomeSaveButton.textContent = "Update Income";
+  } else if (transaction.kind === "Investment") {
+    activateTab("investment-form");
+    document.getElementById("investment-type").value = transaction.type;
+    document.getElementById("investment-amount").value = transaction.amount;
+    document.getElementById("investment-date").value = transaction.date;
+    document.getElementById("investment-error").textContent = "";
+    investmentTabButton.textContent = "Edit Investment";
+    investmentSaveButton.textContent = "Update Investment";
+  }
+
+  showCancelEditButton(transaction.kind);
+}
+
+/**
+ * Returns every form to normal "add" mode. Called after a successful
+ * update and when the user clicks Cancel.
+ */
+function exitEditMode() {
+  editingTransaction = null;
+  expenseTabButton.textContent = "Add Expense";
+  incomeTabButton.textContent = "Add Income";
+  investmentTabButton.textContent = "Add Investment";
+  expenseSaveButton.textContent = "Save Expense";
+  incomeSaveButton.textContent = "Save Income";
+  investmentSaveButton.textContent = "Save Investment";
+  hideCancelEditButtons();
+}
+
+document.querySelectorAll(".cancel-edit-button").forEach((button) => {
+  button.addEventListener("click", () => {
+    exitEditMode();
+  });
+});
+
+// Edit/Delete buttons are rendered fresh every time the transaction list
+// refreshes, so we listen on the container once (event delegation)
+// instead of re-attaching listeners after every render.
+document.getElementById("transaction-list").addEventListener("click", async (e) => {
+  const editButton = e.target.closest(".edit-transaction-button");
+  const deleteButton = e.target.closest(".delete-transaction-button");
+
+  if (editButton) {
+    const id = Number(editButton.dataset.id);
+    const transaction = currentTransactions.find((t) => t.id === id);
+    if (transaction) {
+      enterEditMode(transaction);
+    }
+    return;
+  }
+
+  if (deleteButton) {
+    const id = Number(deleteButton.dataset.id);
+    const confirmed = window.confirm("Delete this transaction?");
+    if (!confirmed) return;
+
+    try {
+      await deleteJson(`${API.transactions}/${id}`);
+      // If the transaction being edited was just deleted, back out of
+      // edit mode instead of leaving a stale form open.
+      if (editingTransaction && editingTransaction.id === id) {
+        exitEditMode();
+      }
+      await refreshAll();
+    } catch (err) {
+      console.error("Could not delete transaction:", err);
+      window.alert(err.message || "Could not delete the transaction.");
+    }
+  }
+});
+
 // ---------- Currency formatting ----------
 
 function formatRupees(amount) {
@@ -245,19 +388,47 @@ async function getJson(url) {
   return data;
 }
 
+async function putJson(url, payload) {
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Something went wrong.");
+  }
+  return data;
+}
+
+async function deleteJson(url) {
+  const response = await fetch(url, { method: "DELETE" });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data.error || "Something went wrong.");
+  }
+  return data;
+}
+
 // ---------- Form submissions ----------
 
 document.getElementById("expense-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const errorEl = document.getElementById("expense-error");
   errorEl.textContent = "";
+  const payload = {
+    category: document.getElementById("expense-category").value,
+    description: document.getElementById("expense-description").value,
+    amount: document.getElementById("expense-amount").value,
+    date: document.getElementById("expense-date").value,
+  };
   try {
-    await postJson(API.expense, {
-      category: document.getElementById("expense-category").value,
-      description: document.getElementById("expense-description").value,
-      amount: document.getElementById("expense-amount").value,
-      date: document.getElementById("expense-date").value,
-    });
+    if (editingTransaction && editingTransaction.kind === "Expense") {
+      await putJson(`${API.transactions}/${editingTransaction.id}`, payload);
+      exitEditMode();
+    } else {
+      await postJson(API.expense, payload);
+    }
     document.getElementById("expense-description").value = "";
     document.getElementById("expense-amount").value = "";
     await refreshAll();
@@ -270,12 +441,18 @@ document.getElementById("income-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   const errorEl = document.getElementById("income-error");
   errorEl.textContent = "";
+  const payload = {
+    type: document.getElementById("income-type").value,
+    amount: document.getElementById("income-amount").value,
+    date: document.getElementById("income-date").value,
+  };
   try {
-    await postJson(API.income, {
-      type: document.getElementById("income-type").value,
-      amount: document.getElementById("income-amount").value,
-      date: document.getElementById("income-date").value,
-    });
+    if (editingTransaction && editingTransaction.kind === "Income") {
+      await putJson(`${API.transactions}/${editingTransaction.id}`, payload);
+      exitEditMode();
+    } else {
+      await postJson(API.income, payload);
+    }
     document.getElementById("income-amount").value = "";
     await refreshAll();
   } catch (err) {
@@ -287,12 +464,18 @@ document.getElementById("investment-form").addEventListener("submit", async (e) 
   e.preventDefault();
   const errorEl = document.getElementById("investment-error");
   errorEl.textContent = "";
+  const payload = {
+    type: document.getElementById("investment-type").value,
+    amount: document.getElementById("investment-amount").value,
+    date: document.getElementById("investment-date").value,
+  };
   try {
-    await postJson(API.investment, {
-      type: document.getElementById("investment-type").value,
-      amount: document.getElementById("investment-amount").value,
-      date: document.getElementById("investment-date").value,
-    });
+    if (editingTransaction && editingTransaction.kind === "Investment") {
+      await putJson(`${API.transactions}/${editingTransaction.id}`, payload);
+      exitEditMode();
+    } else {
+      await postJson(API.investment, payload);
+    }
     document.getElementById("investment-amount").value = "";
     await refreshAll();
   } catch (err) {
@@ -335,6 +518,7 @@ async function refreshCategories() {
 async function refreshTransactions() {
   const month = monthInput.value;
   const transactions = await getJson(`${API.transactions}?month=${month}`);
+  currentTransactions = transactions; // keep for Edit lookups without a second fetch
   const container = document.getElementById("transaction-list");
 
   if (transactions.length === 0) {
@@ -349,6 +533,10 @@ async function refreshTransactions() {
         <span class="transaction-kind ${t.kind}">${t.kind}</span>
         <span class="transaction-detail">${escapeHtml(detail)} &middot; ${t.date}</span>
         <span class="transaction-amount">${formatRupees(t.amount)}</span>
+        <span class="transaction-actions">
+          <button type="button" class="link-button edit-transaction-button" data-id="${t.id}">Edit</button>
+          <button type="button" class="link-button delete-transaction-button" data-id="${t.id}">Delete</button>
+        </span>
       </div>`;
     })
     .join("");

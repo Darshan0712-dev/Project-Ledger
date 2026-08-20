@@ -14,8 +14,8 @@ public class Expense extends Transaction {
     private final String category;
     private final String description;
 
-    public Expense(String category, String description, BigDecimal amount, LocalDate date) {
-        super(amount, date);
+    public Expense(int id, String category, String description, BigDecimal amount, LocalDate date) {
+        super(id, amount, date);
         this.category = category;
         this.description = description;
     }
@@ -36,6 +36,7 @@ public class Expense extends Transaction {
     @Override
     public String toJson() {
         return "{"
+                + "\"id\":" + getId() + ","
                 + "\"kind\":\"Expense\","
                 + "\"category\":\"" + Json.escape(category) + "\","
                 + "\"description\":\"" + Json.escape(description) + "\","

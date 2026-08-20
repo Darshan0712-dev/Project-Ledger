@@ -239,6 +239,31 @@ main {
   opacity: 0.9;
 }
 
+.form-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cancel-edit-button {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+  margin-top: 4px;
+}
+
+.cancel-edit-button:hover {
+  color: var(--text);
+}
+
+.cancel-edit-button[hidden] {
+  display: none;
+}
+
 .form-error {
   color: var(--expense);
   font-size: 13px;
@@ -276,7 +301,7 @@ main {
 
 .transaction-row {
   display: grid;
-  grid-template-columns: 90px 1fr auto;
+  grid-template-columns: 90px 1fr auto auto;
   gap: 10px;
   align-items: center;
   padding: 8px 0;
@@ -306,6 +331,31 @@ main {
 .transaction-amount {
   font-weight: 600;
   text-align: right;
+}
+
+.transaction-actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  white-space: nowrap;
+}
+
+.link-button {
+  border: none;
+  background: none;
+  padding: 0;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-button:hover {
+  color: var(--text);
+}
+
+.delete-transaction-button:hover {
+  color: var(--expense);
 }
 
 .empty-message {

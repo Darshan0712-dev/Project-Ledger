@@ -6,6 +6,7 @@ import com.ledger.model.Income;
 import com.ledger.model.Investment;
 import com.ledger.model.Transaction;
 import com.ledger.util.Json;
+import com.ledger.util.TransactionNotFoundException;
 import com.ledger.util.ValidationException;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpHandler;
@@ -55,7 +56,7 @@ public class LedgerServer {
         server.createContext("/api/income", this::handleAddIncome);
         server.createContext("/api/expense", this::handleAddExpense);
         server.createContext("/api/investment", this::handleAddInvestment);
-        server.createContext("/api/transactions", this::handleGetTransactions);
+        server.createContext("/api/transactions", this::handleTransactionsRoute);
         server.createContext("/api/summary", this::handleGetSummary);
         server.createContext("/api/categories", this::handleGetCategoryTotals);
         server.createContext("/api/insights", this::handleGetInsights);
@@ -134,6 +135,89 @@ public class LedgerServer {
             sendError(exchange, 400, e.getMessage());
         } catch (Exception e) {
             sendError(exchange, 400, "Could not process the request. Please check the values you entered.");
+        }
+    }
+
+    // ---------- Edit / Delete Transactions (V1.2 Milestone 1) ----------
+    //
+    // HttpServer's createContext does PREFIX matching: registering
+    // "/api/transactions" already routes "/api/transactions/7" here too.
+    // So this one router decides, from the path and method, whether the
+    // request is:
+    //   GET    /api/transactions            -> list (existing behavior)
+    //   PUT    /api/transactions/{id}        -> update that transaction
+    //   DELETE /api/transactions/{id}        -> delete that transaction
+
+    private void handleTransactionsRoute(HttpExchange exchange) throws IOException {
+        String path = exchange.getRequestURI().getPath();
+        String prefix = "/api/transactions";
+        String remainder = path.length() > prefix.length() ? path.substring(prefix.length()) : "";
+        remainder = remainder.replaceAll("^/+", "").replaceAll("/+$", "");
+
+        if (remainder.isEmpty()) {
+            handleGetTransactions(exchange);
+            return;
+        }
+
+        int id;
+        try {
+            id = Integer.parseInt(remainder);
+        } catch (NumberFormatException e) {
+            sendError(exchange, 400, "Invalid transaction id.");
+            return;
+        }
+
+        if (methodIs(exchange, "PUT")) {
+            handleUpdateTransaction(exchange, id);
+        } else if (methodIs(exchange, "DELETE")) {
+            handleDeleteTransaction(exchange, id);
+        } else {
+            sendMethodNotAllowed(exchange);
+        }
+    }
+
+    /**
+     * Updates an existing transaction. The request body only contains the
+     * new field values (not the kind), so we first look up the existing
+     * transaction to find out whether it's an Income, Expense, or
+     * Investment, then dispatch to the matching Ledger.updateX method -
+     * which validates the new data the same way addX does, and only
+     * replaces the transaction if that validation passes.
+     */
+    private void handleUpdateTransaction(HttpExchange exchange, int id) throws IOException {
+        try {
+            Transaction existing = ledger.getTransactionById(id);
+            Map<String, String> body = Json.parseFlatObject(readBody(exchange));
+            BigDecimal amount = parseAmount(body.get("amount"));
+            LocalDate date = parseDate(body.get("date"));
+
+            Transaction updated;
+            if (existing instanceof Income) {
+                updated = ledger.updateIncome(id, body.get("type"), amount, date);
+            } else if (existing instanceof Expense) {
+                updated = ledger.updateExpense(id, body.get("category"), body.get("description"), amount, date);
+            } else {
+                updated = ledger.updateInvestment(id, body.get("type"), amount, date);
+            }
+
+            sendJson(exchange, 200, updated.toJson());
+        } catch (TransactionNotFoundException e) {
+            sendError(exchange, 404, e.getMessage());
+        } catch (ValidationException e) {
+            sendError(exchange, 400, e.getMessage());
+        } catch (Exception e) {
+            sendError(exchange, 400, "Could not update the transaction. Please check the values you entered.");
+        }
+    }
+
+    private void handleDeleteTransaction(HttpExchange exchange, int id) throws IOException {
+        try {
+            ledger.deleteTransaction(id);
+            sendJson(exchange, 200, "{\"deleted\":true,\"id\":" + id + "}");
+        } catch (TransactionNotFoundException e) {
+            sendError(exchange, 404, e.getMessage());
+        } catch (Exception e) {
+            sendError(exchange, 400, "Could not delete the transaction.");
         }
     }
 
